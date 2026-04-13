@@ -12,11 +12,24 @@ export async function importContacts(
   let success = 0;
   const errors: { row: number; message: string }[] = [];
 
+  // Look up IMT General to use as the default steward for unassigned contacts
+  const { data: imtGeneral } = await supabase
+    .from('memberships')
+    .select('id')
+    .eq('org_id', orgId)
+    .eq('display_name', 'IMT General')
+    .is('user_id', null)
+    .single();
+
   // Insert one at a time so a single bad row doesn't kill the whole batch
   for (let i = 0; i < contacts.length; i++) {
     const { error } = await supabase
       .from('contacts')
-      .insert({ ...contacts[i], org_id: orgId });
+      .insert({
+        ...contacts[i],
+        org_id: orgId,
+        steward_id: contacts[i].steward_id || imtGeneral?.id || null,
+      });
 
     if (error) {
       errors.push({ row: i + 1, message: error.message });

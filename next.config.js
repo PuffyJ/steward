@@ -5,7 +5,13 @@ const nextConfig = {
   experimental: {
     serverActions: {
       // Allow GitHub Codespaces and local dev origins
-      allowedOrigins: ['localhost:3000', '*.app.github.dev', 'beststeward.com', 'www.beststeward.com'],
+      allowedOrigins: [
+        'localhost:3000',
+        '*.app.github.dev',
+        'verbose-space-acorn-5697v6gj9qgh46qw-3000.app.github.dev',
+        'beststeward.com',
+        'www.beststeward.com',
+      ],
     },
     // Disable client-side router cache so every tab navigation fetches fresh data
     staleTimes: {

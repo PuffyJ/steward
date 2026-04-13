@@ -15,7 +15,7 @@ export function AddContactModal({ memberships, onSave, onClose, saving }: Props)
   const [form, setForm] = useState({
     display_name: '', organization: '', category: 'Individual', contact_type: 'Donor',
     tier: 'Tier 3', capacity: 0, priority: 'C - Maintain', region: 'North America',
-    email: '', steward: '', stage: 'Qualification', ask_amount: 0, probability: 0.15,
+    email: '', steward: 'IMT General', stage: 'Qualification', ask_amount: 0, probability: 0.15,
     next_action: '', next_action_date: '', given_current_year: 0, notes: '',
   });
 
@@ -68,7 +68,13 @@ export function AddContactModal({ memberships, onSave, onClose, saving }: Props)
           <label className="form-label">Steward</label>
           <select className="form-input" value={form.steward} onChange={e => set('steward', e.target.value)}>
             <option value="">—</option>
-            {memberships.map(m => <option key={m.id} value={m.display_name}>{m.display_name}</option>)}
+            {[...memberships]
+              .sort((a, b) => {
+                if (a.display_name === 'IMT General') return 1;
+                if (b.display_name === 'IMT General') return -1;
+                return a.display_name.localeCompare(b.display_name);
+              })
+              .map(m => <option key={m.id} value={m.display_name}>{m.display_name}</option>)}
           </select>
         </div>
         <div>

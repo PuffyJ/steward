@@ -29,15 +29,17 @@ export default async function OrgLayout({
     notFound();
   }
 
-  let membership;
-  try {
-    membership = await getCurrentMembership(supabase, org.id, user.id);
-  } catch {
-    // User is not a member of this org
+  const membershipResult = await Promise.all([
+    getCurrentMembership(supabase, org.id, user.id).catch(() => null),
+    getMemberships(supabase, org.id),
+  ]);
+
+  const membership = membershipResult[0];
+  const memberships = membershipResult[1];
+
+  if (!membership) {
     redirect('/');
   }
-
-  const memberships = await getMemberships(supabase, org.id);
 
   return (
     <OrgProvider org={org} membership={membership} memberships={memberships}>

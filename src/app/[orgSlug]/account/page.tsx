@@ -20,14 +20,26 @@ export default async function AccountPage({ params }: { params: { orgSlug: strin
     notFound();
   }
 
-  const [currentMembership, memberships] = await Promise.all([
+  const [currentMembership, membershipsRaw] = await Promise.all([
     getCurrentMembership(supabase, org.id, user.id),
     getMemberships(supabase, org.id),
   ]);
 
+  // Auto-provision IMT General if it doesn't exist yet for this org
+  let memberships = membershipsRaw;
+  const imtExists = memberships.some((m: any) => m.display_name === 'IMT General' && m.user_id == null);
+  if (!imtExists) {
+    await supabase
+      .from('memberships')
+      .insert({ org_id: org.id, user_id: null, display_name: 'IMT General', role: 'steward' });
+    memberships = await getMemberships(supabase, org.id);
+  }
+
   const isAdmin = currentMembership.role === 'admin';
   const authMembers = memberships.filter((m: any) => m.user_id != null);
   const nameOnlyStewards = memberships.filter((m: any) => m.user_id == null);
+  // Exclude IMT General from the invite dropdown — it's a pool, not a person
+  const nameOnlyStewardsForInvite = nameOnlyStewards.filter((m: any) => m.display_name !== 'IMT General');
 
   return (
     <div className="max-w-2xl">
@@ -42,8 +54,15 @@ export default async function AccountPage({ params }: { params: { orgSlug: strin
           )}
           {nameOnlyStewards.map((m: any, i: number) => (
             <div key={m.id} className={`flex items-center justify-between px-5 py-3.5 ${i < nameOnlyStewards.length - 1 ? 'border-b border-gray-100' : ''}`}>
-              <span className="text-sm font-medium text-gray-900">{m.display_name}</span>
-              {isAdmin && (
+              <div className="flex items-center gap-2">
+                <span className={`text-sm font-medium ${m.display_name === 'IMT General' ? 'text-gray-400' : 'text-gray-900'}`}>
+                  {m.display_name}
+                </span>
+                {m.display_name === 'IMT General' && (
+                  <span className="text-xs text-gray-400 italic">Shared pool</span>
+                )}
+              </div>
+              {m.display_name !== 'IMT General' && isAdmin && (
                 <RemoveStewardButton membershipId={m.id} orgId={org.id} orgSlug={params.orgSlug} />
               )}
             </div>
@@ -77,7 +96,7 @@ export default async function AccountPage({ params }: { params: { orgSlug: strin
         <section>
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Invite someone</h2>
           <div className="bg-white border border-gray-200 rounded-xl p-6">
-            <InviteForm orgId={org.id} orgSlug={params.orgSlug} stewards={nameOnlyStewards} />
+            <InviteForm orgId={org.id} orgSlug={params.orgSlug} stewards={nameOnlyStewardsForInvite} />
           </div>
         </section>
       )}

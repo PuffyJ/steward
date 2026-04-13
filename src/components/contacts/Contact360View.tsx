@@ -21,27 +21,65 @@ type Props = {
   orgId: string;
 };
 
+// Fiscal year = calendar year (Jan 1 – Dec 31)
+function giftYear(dateStr: string): number {
+  return new Date(dateStr + 'T00:00:00').getFullYear();
+}
+
 export function Contact360View({ contact, interactions, memberships, donations, currentMembershipId, orgSlug, orgId }: Props) {
   const router = useRouter();
+  const currentYear = new Date().getFullYear();
+
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState<any>({ ...contact, steward_name: contact.steward?.display_name || '' });
+  const sortedMemberships = [...memberships].sort((a, b) => {
+    if (a.display_name === 'IMT General') return 1;
+    if (b.display_name === 'IMT General') return -1;
+    return a.display_name.localeCompare(b.display_name);
+  });
+
+  const [form, setForm] = useState<any>({ ...contact, steward_name: contact.steward?.display_name || 'IMT General' });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showLog, setShowLog] = useState(false);
 
+  // Giving state
   const today = new Date().toISOString().split('T')[0];
   const [giftDate, setGiftDate] = useState(today);
   const [giftAmount, setGiftAmount] = useState('');
   const [giftNotes, setGiftNotes] = useState('');
   const [giftSaving, setGiftSaving] = useState(false);
   const [giftError, setGiftError] = useState<string | null>(null);
+  const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set([currentYear]));
 
   useEffect(() => {
-    setForm({ ...contact, steward_name: contact.steward?.display_name || '' });
+    setForm({ ...contact, steward_name: contact.steward?.display_name || 'IMT General' });
     setEditing(false);
   }, [contact]);
 
   const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }));
+
+  const toggleYear = (year: number) => {
+    setExpandedYears(prev => {
+      const next = new Set(prev);
+      if (next.has(year)) next.delete(year);
+      else next.add(year);
+      return next;
+    });
+  };
+
+  // Derived giving values
+  const thisYearTotal = donations
+    .filter(d => giftYear(d.date) === currentYear)
+    .reduce((sum, d) => sum + Number(d.amount), 0);
+  const remaining = (contact.ask_amount || 0) - thisYearTotal;
+
+  const donationsByYear = donations.reduce((acc, d) => {
+    const y = giftYear(d.date);
+    if (!acc[y]) acc[y] = [];
+    acc[y].push(d);
+    return acc;
+  }, {} as Record<number, Donation[]>);
+  const sortedYears = Object.keys(donationsByYear).map(Number).sort((a, b) => b - a);
 
   const save = async () => {
     setSaving(true);
@@ -102,6 +140,9 @@ export function Contact360View({ contact, interactions, memberships, donations, 
     setGiftError(null);
     try {
       await addDonation(orgId, contact.id, giftDate, parseFloat(giftAmount), giftNotes);
+      // Auto-expand the year of the new gift
+      const addedYear = giftYear(giftDate);
+      setExpandedYears(prev => new Set([...prev, addedYear]));
       setGiftAmount('');
       setGiftNotes('');
       setGiftDate(today);
@@ -150,7 +191,7 @@ export function Contact360View({ contact, interactions, memberships, donations, 
                 </select>
                 <select className="form-input" value={form.steward_name || ''} onChange={e => set('steward_name', e.target.value)}>
                   <option value="">—</option>
-                  {memberships.map(m => <option key={m.id} value={m.display_name}>{m.display_name}</option>)}
+                  {sortedMemberships.map(m => <option key={m.id} value={m.display_name}>{m.display_name}</option>)}
                 </select>
                 <input className="form-input" type="tel" value={form.phone || ''} onChange={e => set('phone', e.target.value)} placeholder="Phone" />
                 <input className="form-input" type="email" value={form.email || ''} onChange={e => set('email', e.target.value)} placeholder="Email" />
@@ -191,53 +232,95 @@ export function Contact360View({ contact, interactions, memberships, donations, 
         {/* Left column */}
         <div className="space-y-5">
 
-          {/* Giving */}
+          {/* Giving — metric cards + history */}
           <div className="card p-5">
-            <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-sand-300">
-              <h3 className="font-bold text-sm">Giving</h3>
-              <span className="text-sm font-semibold text-forest-700">
-                {formatCurrency(donations.reduce((sum, d) => sum + Number(d.amount), 0))} total
-              </span>
-            </div>
+            <h3 className="font-bold text-sm mb-3 pb-2.5 border-b border-sand-300">Giving</h3>
 
-            {/* Ask + Forecast Date */}
-            <div className="flex flex-wrap gap-6 mb-4">
+            {/* Three metric cards */}
+            <div className="grid grid-cols-3 gap-3 mb-3">
               <div>
                 <div className="form-label">Ask Amount</div>
                 {editing ? (
-                  <input className="form-input mt-1" type="number" value={form.ask_amount ?? ''} onChange={e => set('ask_amount', e.target.value)} />
+                  <input className="form-input mt-1 w-full" type="number" value={form.ask_amount ?? ''} onChange={e => set('ask_amount', e.target.value)} />
                 ) : (
                   <div className="text-base font-bold text-forest-700 mt-1">{formatCurrency(contact.ask_amount)}</div>
                 )}
               </div>
               <div>
-                <div className="form-label">Forecast Date</div>
-                {editing ? (
-                  <input className="form-input mt-1" type="date" value={form.forecast_date || ''} onChange={e => set('forecast_date', e.target.value)} />
-                ) : (
-                  <div className="text-sm font-medium mt-1">{contact.forecast_date || '—'}</div>
-                )}
+                <div className="form-label">This Year</div>
+                <div className="text-base font-bold text-forest-700 mt-1">{formatCurrency(thisYearTotal)}</div>
+              </div>
+              <div>
+                <div className="form-label">Remaining</div>
+                <div className={`text-base font-bold mt-1 ${remaining > 0 ? 'text-amber-700' : 'text-forest-700'}`}>
+                  {formatCurrency(remaining)}
+                </div>
               </div>
             </div>
 
-            {/* Donation list */}
-            {donations.length > 0 && (
-              <div className="space-y-1.5 mb-4 border-t border-sand-200 pt-3">
-                {donations.map(d => (
-                  <div key={d.id} className="flex items-center justify-between text-sm py-1.5 border-b border-sand-100 last:border-0">
-                    <div className="flex gap-3 items-center">
-                      <span className="text-gray-500 tabular-nums w-24">{formatDate(d.date)}</span>
-                      <span className="font-semibold text-forest-700 tabular-nums">{formatCurrency(d.amount)}</span>
-                      {d.notes && <span className="text-gray-400 text-xs truncate max-w-[160px]">{d.notes}</span>}
-                    </div>
-                    <button onClick={() => handleDeleteGift(d.id)} className="text-xs text-gray-300 hover:text-red-500 transition-colors ml-2">×</button>
-                  </div>
-                ))}
-              </div>
-            )}
+            {/* Forecast date */}
+            <div className="mb-4 text-sm text-gray-500 flex items-center gap-2">
+              <span className="form-label mb-0">Forecast Date</span>
+              {editing ? (
+                <input className="form-input" type="date" value={form.forecast_date || ''} onChange={e => set('forecast_date', e.target.value)} />
+              ) : (
+                <span className="font-medium text-gray-700">{contact.forecast_date || '—'}</span>
+              )}
+            </div>
 
-            {/* Record gift form */}
-            <form onSubmit={handleAddGift} className="flex flex-wrap gap-2 items-end border-t border-sand-200 pt-3">
+            {/* Year accordion */}
+            {sortedYears.length > 0 ? (
+              <div className="border-t border-sand-200 pt-1">
+                {sortedYears.map(year => {
+                  const yearGifts = donationsByYear[year].sort((a, b) => b.date.localeCompare(a.date));
+                  const yearTotal = yearGifts.reduce((sum, d) => sum + Number(d.amount), 0);
+                  const isCurrent = year === currentYear;
+                  const isExpanded = expandedYears.has(year);
+                  return (
+                    <div key={year}>
+                      <button
+                        type="button"
+                        onClick={() => toggleYear(year)}
+                        className="w-full flex items-center justify-between py-2 px-1 hover:bg-sand-50 rounded transition-colors text-left"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className={`text-xs transition-transform duration-150 inline-block ${isExpanded ? 'rotate-90' : ''} ${isCurrent ? 'text-gray-500' : 'text-gray-300'}`}>▶</span>
+                          <span className={`text-sm font-semibold ${isCurrent ? 'text-gray-800' : 'text-gray-400'}`}>{year}</span>
+                          <span className="text-xs text-gray-400">{yearGifts.length} gift{yearGifts.length !== 1 ? 's' : ''}</span>
+                        </div>
+                        <span className={`text-sm font-semibold tabular-nums ${isCurrent ? 'text-forest-700' : 'text-gray-400'}`}>
+                          {formatCurrency(yearTotal)}
+                        </span>
+                      </button>
+                      {isExpanded && (
+                        <div className="mb-1">
+                          {yearGifts.map(d => (
+                            <div key={d.id} className="flex items-center justify-between pl-8 pr-1 py-1.5 border-b border-sand-100 last:border-0">
+                              <div className="flex gap-3 items-center min-w-0">
+                                <span className="text-sm text-gray-500 tabular-nums shrink-0 w-24">{formatDate(d.date)}</span>
+                                {d.notes && <span className="text-xs text-gray-400 truncate">{d.notes}</span>}
+                              </div>
+                              <div className="flex items-center gap-3 shrink-0">
+                                <span className="text-sm font-medium tabular-nums">{formatCurrency(d.amount)}</span>
+                                <button type="button" onClick={() => handleDeleteGift(d.id)} className="text-xs text-gray-300 hover:text-red-500 transition-colors">×</button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 border-t border-sand-200 pt-3">No gifts recorded yet.</p>
+            )}
+          </div>
+
+          {/* Record gift — separate card */}
+          <div className="card p-5">
+            <h3 className="font-bold text-sm mb-3">Record Gift</h3>
+            <form onSubmit={handleAddGift} className="flex flex-wrap gap-2 items-end">
               <div>
                 <label className="form-label">Date</label>
                 <input type="date" className="form-input" value={giftDate} onChange={e => setGiftDate(e.target.value)} required />

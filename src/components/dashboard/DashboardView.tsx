@@ -161,12 +161,20 @@ export function DashboardView({ contacts, memberships, recentInteractions, donat
         return {
           id: m.id,
           name: m.display_name,
+          isGeneral: m.display_name === 'IMT General',
           contacts: sc,
           pipeline: sc.reduce((a, c) => a + (c.ask_amount || 0), 0),
           overdue: sc.filter(c => isOverdue(c.next_action_date)).length,
         };
       })
-      .filter(s => s.contacts.length > 0),
+      // Named stewards only show when they have contacts; IMT General always shows
+      .filter(s => s.contacts.length > 0 || s.isGeneral)
+      // IMT General always sorts to the bottom
+      .sort((a, b) => {
+        if (a.isGeneral) return 1;
+        if (b.isGeneral) return -1;
+        return 0;
+      }),
     [contacts, memberships]
   );
 
@@ -376,15 +384,15 @@ export function DashboardView({ contacts, memberships, recentInteractions, donat
             <div key={s.id}>
               <button
                 onClick={() => setExpandedSteward(expandedSteward === s.id ? null : s.id)}
-                className="w-full flex items-center justify-between px-5 py-3.5 border-b border-sand-100 hover:bg-sand-50 transition-colors text-left"
+                className={`w-full flex items-center justify-between px-5 py-3.5 border-b border-sand-100 transition-colors text-left ${s.isGeneral ? 'bg-gray-50 hover:bg-gray-100' : 'hover:bg-sand-50'}`}
               >
                 <div className="flex items-center gap-3">
-                  <span className={`text-xs transition-transform duration-200 ${expandedSteward === s.id ? 'rotate-90' : ''}`}>▶</span>
-                  <span className="font-semibold text-sm">{s.name}</span>
+                  <span className={`text-xs transition-transform duration-200 ${expandedSteward === s.id ? 'rotate-90' : ''} ${s.isGeneral ? 'text-gray-300' : ''}`}>▶</span>
+                  <span className={`font-semibold text-sm ${s.isGeneral ? 'text-gray-400' : ''}`}>{s.name}</span>
                   <span className="text-xs text-gray-400">{s.contacts.length} contacts</span>
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="text-sm tabular-nums text-forest-700 font-semibold">{formatCurrency(s.pipeline)}</span>
+                  <span className={`text-sm tabular-nums font-semibold ${s.isGeneral ? 'text-gray-400' : 'text-forest-700'}`}>{formatCurrency(s.pipeline)}</span>
                   {s.overdue > 0 && <span className="badge bg-amber-100 text-amber-700">{s.overdue} overdue</span>}
                 </div>
               </button>
