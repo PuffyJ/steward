@@ -60,7 +60,7 @@ export function Contact360View({ contact, interactions, memberships, donations, 
 
   const toggleYear = (year: number) => {
     setExpandedYears(prev => {
-      const next = new Set(prev);
+      const next = new Set(Array.from(prev));
       if (next.has(year)) next.delete(year);
       else next.add(year);
       return next;
@@ -142,7 +142,7 @@ export function Contact360View({ contact, interactions, memberships, donations, 
       await addDonation(orgId, contact.id, giftDate, parseFloat(giftAmount), giftNotes);
       // Auto-expand the year of the new gift
       const addedYear = giftYear(giftDate);
-      setExpandedYears(prev => new Set([...prev, addedYear]));
+      setExpandedYears(prev => { const next = new Set(Array.from(prev)); next.add(addedYear); return next; });
       setGiftAmount('');
       setGiftNotes('');
       setGiftDate(today);
