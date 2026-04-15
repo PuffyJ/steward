@@ -40,7 +40,7 @@ export async function inviteMember(
     await assertAdmin(orgId);
 
     const headersList = headers();
-    const origin = headersList.get('origin') || 'http://localhost:3000';
+    const origin = process.env.NEXT_PUBLIC_APP_URL || headersList.get('origin') || 'http://localhost:3000';
 
     const adminClient = getAdminClient();
     const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(
