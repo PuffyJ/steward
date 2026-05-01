@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { Membership } from '@/lib/types';
-import { removeMember, updateMemberRole } from './actions';
+import { removeMember, updateMemberRole, resendInvite } from './actions';
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Admin',
@@ -27,7 +27,9 @@ type Props = {
 
 export function MemberRow({ membership, currentMembershipId, orgId, orgSlug, isAdmin, isLast }: Props) {
   const [removing, setRemoving] = useState(false);
+  const [resending, setResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resendSuccess, setResendSuccess] = useState(false);
   const isSelf = membership.id === currentMembershipId;
 
   async function handleRemove() {
@@ -47,6 +49,19 @@ export function MemberRow({ membership, currentMembershipId, orgId, orgSlug, isA
     if (result.error) setError(result.error);
   }
 
+  async function handleResendInvite() {
+    setResending(true);
+    setError(null);
+    setResendSuccess(false);
+    const result = await resendInvite(membership.id, orgId, orgSlug);
+    setResending(false);
+    if (result.error) {
+      setError(result.error);
+    } else {
+      setResendSuccess(true);
+    }
+  }
+
   return (
     <div className={`flex items-center gap-4 px-5 py-3.5 ${!isLast ? 'border-b border-gray-100' : ''}`}>
       <div className="w-8 h-8 rounded-full bg-forest-100 text-forest-700 flex items-center justify-center text-sm font-semibold shrink-0">
@@ -59,6 +74,7 @@ export function MemberRow({ membership, currentMembershipId, orgId, orgSlug, isA
           {isSelf && <span className="text-xs text-gray-400">(you)</span>}
         </div>
         {error && <p className="text-xs text-red-500 mt-0.5">{error}</p>}
+        {resendSuccess && <p className="text-xs text-green-600 mt-0.5">Invite sent</p>}
       </div>
 
       {isAdmin && !isSelf ? (
@@ -78,13 +94,22 @@ export function MemberRow({ membership, currentMembershipId, orgId, orgSlug, isA
       )}
 
       {isAdmin && !isSelf && (
-        <button
-          onClick={handleRemove}
-          disabled={removing}
-          className="text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-40 ml-1"
-        >
-          {removing ? '…' : 'Remove'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleResendInvite}
+            disabled={resending}
+            className="text-xs text-gray-400 hover:text-forest-600 transition-colors disabled:opacity-40"
+          >
+            {resending ? '…' : 'Resend invite'}
+          </button>
+          <button
+            onClick={handleRemove}
+            disabled={removing}
+            className="text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-40"
+          >
+            {removing ? '…' : 'Remove'}
+          </button>
+        </div>
       )}
     </div>
   );

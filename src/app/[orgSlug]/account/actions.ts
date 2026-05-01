@@ -91,6 +91,10 @@ export async function removeMember(
   try {
     await assertAdmin(orgId);
 
+    const adminClient = getAdminClient();
+    await adminClient.from('contacts').update({ steward_id: null }).eq('steward_id', membershipId);
+    await adminClient.from('interactions').update({ logged_by: null }).eq('logged_by', membershipId);
+
     const supabase = await createServerSupabase();
     const { error } = await supabase
       .from('memberships')
@@ -100,6 +104,44 @@ export async function removeMember(
     if (error) return { error: error.message };
 
     revalidatePath(`/${orgSlug}`, 'layout');
+    return {};
+  } catch (e: any) {
+    return { error: e.message };
+  }
+}
+
+export async function resendInvite(
+  membershipId: string,
+  orgId: string,
+  orgSlug: string
+): Promise<{ error?: string }> {
+  try {
+    await assertAdmin(orgId);
+
+    const supabase = await createServerSupabase();
+    const { data: membership, error: membershipError } = await supabase
+      .from('memberships')
+      .select('user_id')
+      .eq('id', membershipId)
+      .single();
+
+    if (membershipError || !membership?.user_id) return { error: 'Membership not found' };
+
+    const headersList = headers();
+    const origin = process.env.NEXT_PUBLIC_APP_URL || headersList.get('origin') || 'http://localhost:3000';
+
+    const adminClient = getAdminClient();
+    const { data: userData, error: userError } = await adminClient.auth.admin.getUserById(membership.user_id);
+    if (userError || !userData?.user?.email) return { error: 'Could not find user account' };
+
+    const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(
+      userData.user.email,
+      { redirectTo: `${origin}/auth/callback` }
+    );
+
+    if (inviteError) return { error: inviteError.message };
+
+    revalidatePath(`/${orgSlug}/account`);
     return {};
   } catch (e: any) {
     return { error: e.message };
